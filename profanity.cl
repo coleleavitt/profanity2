@@ -277,31 +277,52 @@ mp_word mp_mul_word_add_extra(mp_number * const r, const mp_number * const a, co
 	return *extra < cM ? 1 : (*extra == cM ? cA : 0);
 }
 
-// Multiplies a number with a word, potentially adds modhigher to it, and then subtracts it from en existing number, no extra words, no overflow
-// This is a special function only used for modular multiplication
+// Multiplies a number with a word, potentially adds modhigher to it, and then subtracts it from
+// an existing number, no extra words, no overflow.
+//
+// This is a special function only used for modular multiplication.
+//
+// Optimized code (secp256k1 fast reduction)
+// by Rodrigo Madera (madera at acm dot org).
+//
+// Optimization:
+//
+//   pmod = 2^256 - p
+//
+//   p = 0x1000003D1 = 2^32 + 977
+//
+//   q * pmod = q * (2^256 - p)
+//            = q * 2^256 - q * p
+//
+//   (r - q * pmod) mod 2^256 == (r + q*p) mod 2^256
+//
+// This reduces the amount of bits used giving us 20-35% speed improvements.
+//
 void mp_mul_mod_word_sub(mp_number * const r, const mp_word w, const bool withModHigher) {
-	// Having these numbers declared here instead of using the global values in __constant address space seems to lead
-	// to better optimizations by the compiler on my GTX 1070.
-	mp_number mod = { { 0xfffffc2f, 0xfffffffe, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff} };
-	mp_number modhigher = { {0x00000000, 0xfffffc2f, 0xfffffffe, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff} };
+	const mp_word lo977 = 977u * w;
+	const mp_word hi977 = mul_hi(977u, w);
 
-	mp_word cM = 0; // Carry for multiplication
-	mp_word cS = 0; // Carry for subtraction
-	mp_word tS = 0; // Temporary storage for subtraction
-	mp_word tM = 0; // Temporary storage for multiplication
-	mp_word cA = 0; // Carry for addition of modhigher
+	const mp_word p0 = lo977;
+	const ulong p1_full = (ulong)w + hi977 + (withModHigher ? 0x000003D1u : 0u);
+	const mp_word p1 = (mp_word)p1_full;
+	const mp_word p2 = (mp_word)(p1_full >> 32) + (withModHigher ? 1u : 0u);
 
-	for (mp_word i = 0; i < MP_WORDS; ++i) {
-		tM = (mod.d[i] * w + cM);
-		cM = mul_hi(mod.d[i], w) + (tM < cM);
+	ulong s = (ulong)r->d[0] + p0;
+	r->d[0] = (mp_word)s;
+	mp_word c = (mp_word)(s >> 32);
 
-		tM += (withModHigher ? modhigher.d[i] : 0) + cA;
-		cA = tM < (withModHigher ? modhigher.d[i] : 0) ? 1 : (tM == (withModHigher ? modhigher.d[i] : 0) ? cA : 0);
+	s = (ulong)r->d[1] + p1 + c;
+	r->d[1] = (mp_word)s;
+	c = (mp_word)(s >> 32);
 
-		tS = r->d[i] - tM - cS;
-		cS = tS > r->d[i] ? 1 : (tS == r->d[i] ? cS : 0);
+	s = (ulong)r->d[2] + p2 + c;
+	r->d[2] = (mp_word)s;
+	c = (mp_word)(s >> 32);
 
-		r->d[i] = tS;
+	for (mp_word i = 3; i < MP_WORDS; ++i) {
+		s = (ulong)r->d[i] + c;
+		r->d[i] = (mp_word)s;
+		c = (mp_word)(s >> 32);
 	}
 }
 
@@ -614,13 +635,50 @@ __kernel void profanity_inverse(__global const mp_number * const pDeltaX, __glob
 //
 // One of the scoring kernels will run after this and fetch the address
 // from pInverse.
-__kernel void profanity_iterate(__global mp_number * const pDeltaX, __global mp_number * const pInverse, __global mp_number * const pPrevLambda) {
+// Hashes the public point (x, y) into its 20-byte Ethereum address and stores
+// the address (as 5 uints) at pHashes[idx]. Used by the 6-way GLV/negation
+// check below: one elliptic-curve point yields six candidate addresses.
+void profanity_store_hash(__global mp_number * const pHashes, const size_t idx, const mp_number * const x, const mp_number * const y) {
+	ethhash h = { { 0 } };
+
+	h.d[0] = bswap32(x->d[MP_WORDS - 1]);
+	h.d[1] = bswap32(x->d[MP_WORDS - 2]);
+	h.d[2] = bswap32(x->d[MP_WORDS - 3]);
+	h.d[3] = bswap32(x->d[MP_WORDS - 4]);
+	h.d[4] = bswap32(x->d[MP_WORDS - 5]);
+	h.d[5] = bswap32(x->d[MP_WORDS - 6]);
+	h.d[6] = bswap32(x->d[MP_WORDS - 7]);
+	h.d[7] = bswap32(x->d[MP_WORDS - 8]);
+	h.d[8] = bswap32(y->d[MP_WORDS - 1]);
+	h.d[9] = bswap32(y->d[MP_WORDS - 2]);
+	h.d[10] = bswap32(y->d[MP_WORDS - 3]);
+	h.d[11] = bswap32(y->d[MP_WORDS - 4]);
+	h.d[12] = bswap32(y->d[MP_WORDS - 5]);
+	h.d[13] = bswap32(y->d[MP_WORDS - 6]);
+	h.d[14] = bswap32(y->d[MP_WORDS - 7]);
+	h.d[15] = bswap32(y->d[MP_WORDS - 8]);
+	h.d[16] ^= 0x01; // length 64
+
+	sha3_keccakf(&h);
+
+	pHashes[idx].d[0] = h.d[3];
+	pHashes[idx].d[1] = h.d[4];
+	pHashes[idx].d[2] = h.d[5];
+	pHashes[idx].d[3] = h.d[6];
+	pHashes[idx].d[4] = h.d[7];
+}
+
+__kernel void profanity_iterate(__global mp_number * const pDeltaX, __global mp_number * const pInverse, __global mp_number * const pPrevLambda, __global mp_number * const pHashes) {
 	const size_t id = get_global_id(0);
 
 	// negativeGx = 0x8641998106234453aa5f9d6a3178f4f8fd640324d231d726a60d7ea3e907e497
 	mp_number negativeGx = { {0xe907e497, 0xa60d7ea3, 0xd231d726, 0xfd640324, 0x3178f4f8, 0xaa5f9d6a, 0x06234453, 0x86419981 } };
 
-	ethhash h = { { 0 } };
+	// GLV endomorphism field constant beta (cube root of 1 mod p) and beta^2.
+	// (beta*x, y) is the point lambda*P; (beta^2*x, y) is lambda^2*P. Verified in eth_crypto.py.
+	mp_number beta        = { {0x719501ee, 0xc1396c28, 0x12f58995, 0x9cf04975, 0xac3434e9, 0x6e64479e, 0x657c0710, 0x7ae96a2b} };
+	mp_number betaSquared = { {0x8e6afa40, 0x3ec693d6, 0xed0a766a, 0x630fb68a, 0x53cbcb16, 0x919bb861, 0x9a83f8ef, 0x851695d4} };
+	mp_number zero = { {0} };
 
 	mp_number dX = pDeltaX[id];
 	mp_number tmp = pInverse[id];
@@ -647,33 +705,24 @@ __kernel void profanity_iterate(__global mp_number * const pDeltaX, __global mp_
 	// Restore X coordinate from delta value
 	mp_mod_sub(&dX, &dX, &negativeGx);
 
-	// Initialize Keccak structure with point coordinates in big endian
-	h.d[0] = bswap32(dX.d[MP_WORDS - 1]);
-	h.d[1] = bswap32(dX.d[MP_WORDS - 2]);
-	h.d[2] = bswap32(dX.d[MP_WORDS - 3]);
-	h.d[3] = bswap32(dX.d[MP_WORDS - 4]);
-	h.d[4] = bswap32(dX.d[MP_WORDS - 5]);
-	h.d[5] = bswap32(dX.d[MP_WORDS - 6]);
-	h.d[6] = bswap32(dX.d[MP_WORDS - 7]);
-	h.d[7] = bswap32(dX.d[MP_WORDS - 8]);
-	h.d[8] = bswap32(tmp.d[MP_WORDS - 1]);
-	h.d[9] = bswap32(tmp.d[MP_WORDS - 2]);
-	h.d[10] = bswap32(tmp.d[MP_WORDS - 3]);
-	h.d[11] = bswap32(tmp.d[MP_WORDS - 4]);
-	h.d[12] = bswap32(tmp.d[MP_WORDS - 5]);
-	h.d[13] = bswap32(tmp.d[MP_WORDS - 6]);
-	h.d[14] = bswap32(tmp.d[MP_WORDS - 7]);
-	h.d[15] = bswap32(tmp.d[MP_WORDS - 8]);
-	h.d[16] ^= 0x01; // length 64
+	// 6-way GLV endomorphism + point negation. From this single point (dX, tmp)
+	// derive six independent candidate addresses, each with a reconstructable
+	// private key (see printResult and eth_crypto.variant_privkeys):
+	//   v0 (x,      y)   v1 (beta*x,   y)   v2 (beta^2*x,   y)
+	//   v3 (x,     -y)   v4 (beta*x,  -y)   v5 (beta^2*x,  -y)
+	// pHashes is 6x the point count; hashes for point id occupy [id*6 .. id*6+5].
+	mp_number glvX, glv2X, negY;
+	mp_mod_mul(&glvX, &dX, &beta);          // beta  * x
+	mp_mod_mul(&glv2X, &dX, &betaSquared);  // beta^2 * x
+	mp_mod_sub(&negY, &zero, &tmp);         // p - y
 
-	sha3_keccakf(&h);
-
-	// Save public address hash in pInverse, only used as interim storage until next cycle
-	pInverse[id].d[0] = h.d[3];
-	pInverse[id].d[1] = h.d[4];
-	pInverse[id].d[2] = h.d[5];
-	pInverse[id].d[3] = h.d[6];
-	pInverse[id].d[4] = h.d[7];
+	const size_t base = id * 6;
+	profanity_store_hash(pHashes, base + 0, &dX,    &tmp);
+	profanity_store_hash(pHashes, base + 1, &glvX,  &tmp);
+	profanity_store_hash(pHashes, base + 2, &glv2X, &tmp);
+	profanity_store_hash(pHashes, base + 3, &dX,    &negY);
+	profanity_store_hash(pHashes, base + 4, &glvX,  &negY);
+	profanity_store_hash(pHashes, base + 5, &glv2X, &negY);
 }
 
 void profanity_result_update(const size_t id, __global const uchar * const hash, __global result * const pResult, const uchar score, const uchar scoreMax) {
@@ -733,6 +782,41 @@ __kernel void profanity_score_matching(__global mp_number * const pInverse, __gl
 	for (int i = 0; i < 20; ++i) {
 		if (data1[i] > 0 && (hash[i] & data1[i]) == data2[i]) {
 			++score;
+		}
+	}
+
+	profanity_result_update(id, hash, pResult, score, scoreMax);
+}
+
+// Multi-pattern prefix search: checks each address against a list of hex-nibble
+// patterns (the user's word list) in a single pass. Score is the length, in
+// nibbles, of the longest pattern that COMPLETELY matches this address (0 if
+// none), so a full word match surfaces as score == word length. Cost over
+// single --matching is only the extra nibble comparisons; the keccak (already
+// the bottleneck) is paid once regardless of pattern count.
+__kernel void profanity_score_multipattern(__global mp_number * const pInverse, __global result * const pResult, __constant const uchar * const patNibbles, __constant const uchar * const patLen, const uchar patCount, const uchar scoreMax) {
+	const size_t id = get_global_id(0);
+	__global const uchar * const hash = pInverse[id].d;
+
+	// Address nibbles we might need (patterns are capped at PROFANITY_PATTERN_NIBBLES).
+	uchar nib[PROFANITY_PATTERN_NIBBLES];
+	for (int i = 0; i < PROFANITY_PATTERN_NIBBLES / 2; ++i) {
+		nib[2 * i]     = (hash[i] & 0xF0) >> 4;
+		nib[2 * i + 1] = (hash[i] & 0x0F);
+	}
+
+	int score = 0;
+	for (uchar p = 0; p < patCount; ++p) {
+		const uchar plen = patLen[p];
+		__constant const uchar * const pat = patNibbles + (size_t)p * PROFANITY_PATTERN_NIBBLES;
+
+		uchar k = 0;
+		while (k < plen && nib[k] == pat[k]) {
+			++k;
+		}
+
+		if (k == plen && (int)plen > score) {
+			score = plen; // full match of this word
 		}
 	}
 

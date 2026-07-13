@@ -22,6 +22,11 @@ usage: ./profanity2 [OPTIONS]
   Modes with arguments:
     --leading <single hex>  Score on hashes leading with given hex character.
     --matching <hex string> Score on hashes matching given hex string.
+    -L, --matching-list <file>
+                            Prefix-search for ANY word in a file (one hex
+                            pattern per line; '#' comments and '0x' ok). Checks
+                            all patterns per hash; score = length of the longest
+                            complete match.
 
   Advanced modes:
     --contract              Instead of account address, score the contract

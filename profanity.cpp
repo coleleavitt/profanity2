@@ -33,24 +33,76 @@ std::string readFile(const char * const szFilename)
 	return contents.str();
 }
 
-std::vector<cl_device_id> getAllDevices(cl_device_type deviceType = CL_DEVICE_TYPE_GPU)
-{
+// Reads a word list for --matching-list: one hex pattern per line. Whitespace,
+// an optional "0x" prefix, blank lines and '#' comments are ignored.
+std::vector<std::string> readPatternFile(const std::string & strFilename) {
+	std::ifstream in(strFilename);
+	if (!in) {
+		throw std::runtime_error("cannot open pattern list: " + strFilename);
+	}
+
+	std::vector<std::string> words;
+	std::string line;
+	while (std::getline(in, line)) {
+		std::string w;
+		for (char c : line) {
+			if (!isspace(static_cast<unsigned char>(c))) {
+				w += c;
+			}
+		}
+		if (w.empty() || w[0] == '#') {
+			continue;
+		}
+		if (w.size() >= 2 && w[0] == '0' && (w[1] == 'x' || w[1] == 'X')) {
+			w = w.substr(2);
+		}
+		if (!w.empty()) {
+			words.push_back(w);
+		}
+	}
+	return words;
+}
+
+std::vector<cl_device_id> getAllDevices(cl_device_type deviceType = CL_DEVICE_TYPE_GPU) {
 	std::vector<cl_device_id> vDevices;
 
 	cl_uint platformIdCount = 0;
-	clGetPlatformIDs (0, NULL, &platformIdCount);
+	cl_int err = clGetPlatformIDs(0, NULL, &platformIdCount);
+	if (err != CL_SUCCESS || platformIdCount == 0) {
+		std::cerr << "warning: no OpenCL platforms found, err = " << err << std::endl;
+		return vDevices;
+	}
 
-	std::vector<cl_platform_id> platformIds (platformIdCount);
-	clGetPlatformIDs (platformIdCount, platformIds.data (), NULL);
+	std::vector<cl_platform_id> platformIds(platformIdCount);
+	err = clGetPlatformIDs(platformIdCount, platformIds.data(), NULL);
+	if (err != CL_SUCCESS) {
+		std::cerr << "warning: failed to enumerate OpenCL platforms, err = " << err << std::endl;
+		return vDevices;
+	}
 
-	for( auto it = platformIds.cbegin(); it != platformIds.cend(); ++it ) {
-		cl_uint countDevice;
-		clGetDeviceIDs(*it, deviceType, 0, NULL, &countDevice);
+	for (auto it = platformIds.cbegin(); it != platformIds.cend(); ++it) {
+		cl_uint countDevice = 0;
+
+		err = clGetDeviceIDs(*it, deviceType, 0, NULL, &countDevice);
+		if (err != CL_SUCCESS || countDevice == 0) {
+			char platformName[256] = {0};
+			clGetPlatformInfo(*it, CL_PLATFORM_NAME, sizeof(platformName), platformName, NULL);
+			std::cerr << "warning: skipping OpenCL platform without usable GPU devices: "
+			          << platformName << ", err = " << err << std::endl;
+			continue;
+		}
 
 		std::vector<cl_device_id> deviceIds(countDevice);
-		clGetDeviceIDs(*it, deviceType, countDevice, deviceIds.data(), &countDevice);
+		err = clGetDeviceIDs(*it, deviceType, countDevice, deviceIds.data(), &countDevice);
+		if (err != CL_SUCCESS) {
+			char platformName[256] = {0};
+			clGetPlatformInfo(*it, CL_PLATFORM_NAME, sizeof(platformName), platformName, NULL);
+			std::cerr << "warning: failed to get GPU devices from platform: "
+			          << platformName << ", err = " << err << std::endl;
+			continue;
+		}
 
-		std::copy( deviceIds.begin(), deviceIds.end(), std::back_inserter(vDevices) );
+		std::copy(deviceIds.begin(), deviceIds.end(), std::back_inserter(vDevices));
 	}
 
 	return vDevices;
@@ -114,7 +166,7 @@ std::vector<std::string> getBinaries(cl_program & clProgram) {
 }
 
 unsigned int getUniqueDeviceIdentifier(const cl_device_id & deviceId) {
-#if defined(CL_DEVICE_TOPOLOGY_AMD)
+#if defined(CL_DEVICE_TOPOLOGY_AMD) && defined(CL_DEVICE_TOPOLOGY_TYPE_PCIE_AMD)
 	auto topology = clGetWrapper<cl_device_topology_amd>(clGetDeviceInfo, deviceId, CL_DEVICE_TOPOLOGY_AMD);
 	if (topology.raw.type == CL_DEVICE_TOPOLOGY_TYPE_PCIE_AMD) {
 		return (topology.pcie.bus << 16) + (topology.pcie.device << 8) + topology.pcie.function;
@@ -156,6 +208,7 @@ int main(int argc, char * * argv) {
 		bool bModeNumbers = false;
 		std::string strModeLeading;
 		std::string strModeMatching;
+		std::string strModeMatchingList;
 		std::string strPublicKey;
 		bool bModeLeadingRange = false;
 		bool bModeRange = false;
@@ -178,6 +231,7 @@ int main(int argc, char * * argv) {
 		argp.addSwitch('3', "numbers", bModeNumbers);
 		argp.addSwitch('4', "leading", strModeLeading);
 		argp.addSwitch('5', "matching", strModeMatching);
+		argp.addSwitch('L', "matching-list", strModeMatchingList);
 		argp.addSwitch('6', "leading-range", bModeLeadingRange);
 		argp.addSwitch('7', "range", bModeRange);
 		argp.addSwitch('8', "mirror", bModeMirror);
@@ -217,6 +271,8 @@ int main(int argc, char * * argv) {
 			mode = Mode::leading(strModeLeading.front());
 		} else if (!strModeMatching.empty()) {
 			mode = Mode::matching(strModeMatching);
+		} else if (!strModeMatchingList.empty()) {
+			mode = Mode::matchingList(readPatternFile(strModeMatchingList));
 		} else if (bModeLeadingRange) {
 			mode = Mode::leadingRange(rangeMin, rangeMax);
 		} else if (bModeRange) {
@@ -333,7 +389,7 @@ int main(int argc, char * * argv) {
 
 		// Build the program
 		std::cout << "  Building program..." << std::flush;
-		const std::string strBuildOptions = "-D PROFANITY_INVERSE_SIZE=" + toString(inverseSize) + " -D PROFANITY_MAX_SCORE=" + toString(PROFANITY_MAX_SCORE);
+		const std::string strBuildOptions = "-D PROFANITY_INVERSE_SIZE=" + toString(inverseSize) + " -D PROFANITY_MAX_SCORE=" + toString(PROFANITY_MAX_SCORE) + " -D PROFANITY_PATTERN_NIBBLES=" + toString(PROFANITY_PATTERN_NIBBLES);
 		if (printResult(clBuildProgram(clProgram, vDevices.size(), vDevices.data(), strBuildOptions.c_str(), NULL, NULL))) {
 #ifdef PROFANITY_DEBUG
 			std::cout << std::endl;

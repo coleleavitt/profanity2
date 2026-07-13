@@ -41,6 +41,57 @@ $ python3
 >>> hex((PRIVATE_KEY_A + PRIVATE_KEY_B) % 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F)
 ```
 
+# 6-way GLV/negation search (this fork)
+
+This fork checks **six** candidate addresses per elliptic-curve point instead of
+one, using the secp256k1 GLV endomorphism (`(x,y)`, `(βx,y)`, `(β²x,y)`) and
+point negation (each of those with `-y`). The five extra candidates cost only a
+couple of field multiplications plus one keccak each, so effective throughput
+(candidate addresses per second, which is what `Total: … MH/s` now reports)
+rises by roughly **1.8–1.9x**. The idea is the same symmetry trick VanitySearch
+uses for Bitcoin; here it is applied to profanity2's Ethereum kernel.
+
+Because five of the six variants are not a simple `seed + delta` addition, each
+hit now prints a `Variant:` tag:
+```
+  Time: … Private: 0x<delta> Variant: <0-5> Matching: 0x<address>
+```
+The real private key is `variant_v(seed_priv + delta) mod n`, where the variant
+applies `λ` / `λ²` (endomorphism) and/or negation. Reconstruct and verify it with
+the bundled helper (keys live in `~/.profanity2/`):
+```bash
+python3 ~/.profanity2/combine.py <logfile> --prefix ca5cade
+```
+It recomputes the address from the candidate key and refuses to emit anything
+unless it matches the printed address, so a kernel or bookkeeping bug can only
+cost a missed hit, never a wrong key. Variant meanings:
+
+| Variant | Address form   | Private key           |
+|---------|----------------|-----------------------|
+| 0       | `(x,  y)`      | `k`                   |
+| 1       | `(βx, y)`      | `λk mod n`            |
+| 2       | `(β²x, y)`     | `λ²k mod n`           |
+| 3       | `(x,  -y)`     | `n − k`               |
+| 4       | `(βx, -y)`     | `n − λk`              |
+| 5       | `(β²x, -y)`    | `n − λ²k`             |
+
+(where `k = seed_priv + delta`). The endomorphism constants and every variant
+transform are self-tested in `~/.profanity2/eth_crypto.py`.
+
+## Searching a whole word list at once (`--matching-list`)
+
+Instead of one prefix, hunt for **any** word in a file — each address is checked
+against every pattern in a single pass, so the keccak (the bottleneck) is paid
+once no matter how many words you list. The first hit for "any of my words"
+arrives ~N× sooner than searching them one at a time.
+```bash
+./profanity2.x64 --matching-list ~/.profanity2/armenian.txt -z <pubkey>
+```
+The file holds one hex pattern per line (`#` comments and `0x` prefixes ok; up to
+64 patterns of 16 nibbles). The reported `Score` is the length of the longest
+word that fully matched, so hits climb as longer words are found. Reconstruct any
+hit exactly as above with `combine.py --prefix <the word>`.
+
 # Usage
 ```
 usage: ./profanity2 [OPTIONS]

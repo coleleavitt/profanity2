@@ -77,14 +77,21 @@ static void printResult(cl_ulong4 seed, cl_ulong round, result r, cl_uchar score
 	// Time delta
 	const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - timeStart).count();
 
-	// Format private key
+	// Each advanced point emits 6 candidate addresses (GLV beta/beta^2 x negation);
+	// the score kernel's global id packs both: point index and which variant matched.
+	const cl_ulong foundPoint = r.foundId / 6;
+	const unsigned int variant = r.foundId % 6;
+
+	// Format private key delta d (the scalar this point added to the seed public key).
+	// The address that actually matched belongs to variant_v(seed_priv + d); the
+	// combine step (eth_crypto.variant_privkeys) applies the variant transform.
 	cl_ulong carry = 0;
 	cl_ulong4 seedRes;
 
 	seedRes.s[0] = seed.s[0] + round; carry = seedRes.s[0] < round;
 	seedRes.s[1] = seed.s[1] + carry; carry = !seedRes.s[1];
 	seedRes.s[2] = seed.s[2] + carry; carry = !seedRes.s[2];
-	seedRes.s[3] = seed.s[3] + carry + r.foundId;
+	seedRes.s[3] = seed.s[3] + carry + foundPoint;
 
 	std::ostringstream ss;
 	ss << std::hex << std::setfill('0');
@@ -96,7 +103,7 @@ static void printResult(cl_ulong4 seed, cl_ulong round, result r, cl_uchar score
 
 	// Print
 	const std::string strVT100ClearLine = "\33[2K\r";
-	std::cout << strVT100ClearLine << "  Time: " << std::setw(5) << seconds << "s Score: " << std::setw(2) << (int) score << " Private: 0x" << strPrivate << ' ';
+	std::cout << strVT100ClearLine << "  Time: " << std::setw(5) << seconds << "s Score: " << std::setw(2) << (int) score << " Private: 0x" << strPrivate << " Variant: " << variant << ' ';
 
 	std::cout << mode.transformName();
 	std::cout << ": 0x" << strPublic << std::endl;
@@ -183,9 +190,13 @@ Dispatcher::Device::Device(Dispatcher & parent, cl_context & clContext, cl_progr
 	m_memPointsDeltaX(clContext, m_clQueue, CL_MEM_READ_WRITE | CL_MEM_HOST_NO_ACCESS, size, true),
 	m_memInversedNegativeDoubleGy(clContext, m_clQueue, CL_MEM_READ_WRITE | CL_MEM_HOST_NO_ACCESS, size, true),
 	m_memPrevLambda(clContext, m_clQueue, CL_MEM_READ_WRITE | CL_MEM_HOST_NO_ACCESS, size, true),
+	m_memHashes(clContext, m_clQueue, CL_MEM_READ_WRITE | CL_MEM_HOST_NO_ACCESS, size * 6, true),
 	m_memResult(clContext, m_clQueue, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, PROFANITY_MAX_SCORE + 1),
 	m_memData1(clContext, m_clQueue, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, 20),
 	m_memData2(clContext, m_clQueue, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, 20),
+	m_memPatNibbles(clContext, m_clQueue, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, PROFANITY_MAX_PATTERNS * PROFANITY_PATTERN_NIBBLES),
+	m_memPatLen(clContext, m_clQueue, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, PROFANITY_MAX_PATTERNS),
+	m_scoreMaxArgIndex(4),
 	m_clSeed(createSeed()),
 	m_clSeedX(clSeedX),
 	m_clSeedY(clSeedY),
@@ -315,19 +326,40 @@ void Dispatcher::initBegin(Device & d) {
 	d.m_memPointsDeltaX.setKernelArg(d.m_kernelIterate, 0);
 	d.m_memInversedNegativeDoubleGy.setKernelArg(d.m_kernelIterate, 1);
 	d.m_memPrevLambda.setKernelArg(d.m_kernelIterate, 2);
+	d.m_memHashes.setKernelArg(d.m_kernelIterate, 3);
 
 	// Kernel arguments - profanity_transform_*
+	// (transform + score run over the 6x candidate-address buffer)
 	if(d.m_kernelTransform) {
-		d.m_memInversedNegativeDoubleGy.setKernelArg(d.m_kernelTransform, 0);
+		d.m_memHashes.setKernelArg(d.m_kernelTransform, 0);
 	}
 
 	// Kernel arguments - profanity_score_*
-	d.m_memInversedNegativeDoubleGy.setKernelArg(d.m_kernelScore, 0);
+	d.m_memHashes.setKernelArg(d.m_kernelScore, 0);
 	d.m_memResult.setKernelArg(d.m_kernelScore, 1);
-	d.m_memData1.setKernelArg(d.m_kernelScore, 2);
-	d.m_memData2.setKernelArg(d.m_kernelScore, 3);
 
-	CLMemory<cl_uchar>::setKernelArg(d.m_kernelScore, 4, d.m_clScoreMax); // Updated in handleResult()
+	if (m_mode.multipattern) {
+		// Upload the word list, then bind (patNibbles, patLen, patCount, scoreMax).
+		for (size_t i = 0; i < m_mode.patNibbles.size(); ++i) {
+			d.m_memPatNibbles[i] = m_mode.patNibbles[i];
+		}
+		for (size_t i = 0; i < m_mode.patLen.size(); ++i) {
+			d.m_memPatLen[i] = m_mode.patLen[i];
+		}
+		d.m_memPatNibbles.write(true);
+		d.m_memPatLen.write(true);
+
+		d.m_memPatNibbles.setKernelArg(d.m_kernelScore, 2);
+		d.m_memPatLen.setKernelArg(d.m_kernelScore, 3);
+		CLMemory<cl_uchar>::setKernelArg(d.m_kernelScore, 4, m_mode.patCount);
+		d.m_scoreMaxArgIndex = 5;
+	} else {
+		d.m_memData1.setKernelArg(d.m_kernelScore, 2);
+		d.m_memData2.setKernelArg(d.m_kernelScore, 3);
+		d.m_scoreMaxArgIndex = 4;
+	}
+
+	CLMemory<cl_uchar>::setKernelArg(d.m_kernelScore, d.m_scoreMaxArgIndex, d.m_clScoreMax); // Updated in handleResult()
 
 	// Seed device
 	initContinue(d);
@@ -414,11 +446,13 @@ void Dispatcher::dispatch(Device & d) {
 	enqueueKernelDevice(d, d.m_kernelIterate, m_size);
 #endif
 
+	// iterate advances m_size points but emits 6 candidate addresses each, so the
+	// transform and score kernels run over 6x the work items.
 	if (d.m_kernelTransform) {
-		enqueueKernelDevice(d, d.m_kernelTransform, m_size);
+		enqueueKernelDevice(d, d.m_kernelTransform, m_size * 6);
 	}
 
-	enqueueKernelDevice(d, d.m_kernelScore, m_size);
+	enqueueKernelDevice(d, d.m_kernelScore, m_size * 6);
 	clFlush(d.m_clQueue);
 
 #ifdef PROFANITY_DEBUG
@@ -439,7 +473,7 @@ void Dispatcher::handleResult(Device & d) {
 
 		if (r.found > 0 && i >= d.m_clScoreMax) {
 			d.m_clScoreMax = i;
-			CLMemory<cl_uchar>::setKernelArg(d.m_kernelScore, 4, d.m_clScoreMax);
+			CLMemory<cl_uchar>::setKernelArg(d.m_kernelScore, d.m_scoreMaxArgIndex, d.m_clScoreMax);
 
 			std::lock_guard<std::mutex> lock(m_mutex);
 			if (i >= m_clScoreMax) {
@@ -470,7 +504,8 @@ void Dispatcher::onEvent(cl_event event, cl_int status, Device & d) {
 		bool bDispatch = true;
 		{
 			std::lock_guard<std::mutex> lock(m_mutex);
-			d.m_speed.sample(m_size);
+			// 6 candidate addresses checked per advanced point; report candidates/sec.
+			d.m_speed.sample(m_size * 6);
 			printSpeed();
 
 			if( m_quit ) {

@@ -66,6 +66,39 @@ Mode Mode::matching(const std::string strHex) {
 	return r;
 }
 
+Mode Mode::matchingList(const std::vector<std::string> & words) {
+	Mode r;
+	r.name = "matching-list";
+	r.kernel = "profanity_score_multipattern";
+	r.multipattern = true;
+
+	for (const auto & w : words) {
+		if (w.empty()) {
+			continue;
+		}
+		if (w.size() > PROFANITY_PATTERN_NIBBLES) {
+			throw std::runtime_error("pattern too long (max " + std::to_string(PROFANITY_PATTERN_NIBBLES) + " hex chars): " + w);
+		}
+		if (r.patCount >= PROFANITY_MAX_PATTERNS) {
+			throw std::runtime_error("too many patterns (max " + std::to_string(PROFANITY_MAX_PATTERNS) + ")");
+		}
+
+		const size_t base = r.patNibbles.size();
+		r.patNibbles.resize(base + PROFANITY_PATTERN_NIBBLES, 0);
+		for (size_t i = 0; i < w.size(); ++i) {
+			r.patNibbles[base + i] = static_cast<cl_uchar>(hexValue(w[i]));
+		}
+		r.patLen.push_back(static_cast<cl_uchar>(w.size()));
+		++r.patCount;
+	}
+
+	if (r.patCount == 0) {
+		throw std::runtime_error("pattern list is empty");
+	}
+
+	return r;
+}
+
 Mode Mode::leading(const char charLeading) {
 
 	Mode r;

@@ -59,11 +59,19 @@ class Dispatcher {
 			CLMemory<mp_number> m_memPointsDeltaX;
 			CLMemory<mp_number> m_memInversedNegativeDoubleGy;
 			CLMemory<mp_number> m_memPrevLambda;
+			// 6 candidate addresses per point (GLV beta/beta^2 x point negation).
+			CLMemory<mp_number> m_memHashes;
 			CLMemory<result> m_memResult;
 
 			// Data parameters used in some modes
 			CLMemory<cl_uchar> m_memData1;
 			CLMemory<cl_uchar> m_memData2;
+
+			// Multi-pattern (--matching-list) parameters
+			CLMemory<cl_uchar> m_memPatNibbles;
+			CLMemory<cl_uchar> m_memPatLen;
+			// scoreMax kernel-arg index differs between score kernels (4, or 5 for multipattern)
+			cl_uint m_scoreMaxArgIndex;
 
 			// Seed and round information
 			cl_ulong4 m_clSeed;
