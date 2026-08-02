@@ -1,0 +1,550 @@
+# Instincts generated from https://github.com/coleleavitt/profanity2
+# Generated: 2026-08-02T10:47:54.999Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: profanity2-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/coleleavitt/profanity2
+---
+
+# Profanity2 Commit Length
+
+## Action
+
+Write moderate-length commit messages (~61 characters)
+
+## Evidence
+
+- Average commit message length: 61 chars
+- Based on 37 commits
+
+---
+id: profanity2-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/coleleavitt/profanity2
+---
+
+# Profanity2 Naming Files
+
+## Action
+
+Use PascalCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: PascalCase
+
+---
+id: profanity2-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/coleleavitt/profanity2
+---
+
+# Profanity2 Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: profanity2-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/coleleavitt/profanity2
+---
+
+# Profanity2 Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: profanity2-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/coleleavitt/profanity2
+---
+
+# Profanity2 Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: profanity2-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/coleleavitt/profanity2
+---
+
+# Profanity2 Test Naming
+
+## Action
+
+Name test files using the pattern: *.test.ts
+
+## Evidence
+
+- File pattern: *.test.ts
+- Consistent across test files
+
+---
+id: profanity2-workflow-feature-development
+trigger: "when implementing a new feature"
+confidence: 0.7
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/coleleavitt/profanity2
+---
+
+# Profanity2 Workflow Feature Development
+
+## Action
+
+Follow the feature-development workflow:
+1. Add feature implementation
+2. Add tests for feature
+3. Update documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~4x per month
+- Files: **/*.test.*
+
+---
+id: profanity2-workflow-feature-development-with-tests-and-benchmarks
+trigger: "when doing feature development with tests and benchmarks"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/coleleavitt/profanity2
+---
+
+# Profanity2 Workflow Feature Development With Tests And Benchmarks
+
+## Action
+
+Follow the feature-development-with-tests-and-benchmarks workflow:
+1. Edit or optimize the kernel source file (profanity.cl, keccak.cl).
+2. Update or add new test source files (tests/test_correctness.cpp, tests/bench_mod_mul.cpp, tests/harness.cl, tests/testutil.hpp).
+3. Update or add benchmark files (tests/bench_mod_mul.cpp, tests/bench_mod_mul_pr49.cpp).
+4. Update Makefile or tests/Makefile to include new tests/benchmarks.
+5. Update .gitignore if new generated files are created.
+6. Commit all related changes together.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: profanity.cl, keccak.cl, tests/bench_mod_mul.cpp
+
+---
+id: profanity2-workflow-documentation-update-and-enhancement
+trigger: "when doing documentation update and enhancement"
+confidence: 0.65
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/coleleavitt/profanity2
+---
+
+# Profanity2 Workflow Documentation Update And Enhancement
+
+## Action
+
+Follow the documentation-update-and-enhancement workflow:
+1. Edit or add documentation files (README.md, docs/BUILD_UBUNTU.md, docs/BUILD_WINDOWS.md).
+2. Add new documentation files if needed.
+3. Link documentation changes to related issues or contributions.
+4. Commit all documentation changes together.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~3x per month
+- Files: README.md, docs/BUILD_UBUNTU.md, docs/BUILD_WINDOWS.md
+
+---
+id: profanity2-workflow-windows-build-support-update
+trigger: "when doing windows build support update"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/coleleavitt/profanity2
+---
+
+# Profanity2 Workflow Windows Build Support Update
+
+## Action
+
+Follow the windows-build-support-update workflow:
+1. Edit source files to fix Windows-specific issues (Dispatcher.cpp, profanity.cpp).
+2. Edit Makefile to support Windows targets.
+3. Update or add Windows build documentation (docs/BUILD_WINDOWS.md).
+4. Update README.md if needed.
+5. Commit all related changes together.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: Dispatcher.cpp, profanity.cpp, Makefile
+
+---
+id: profanity2-workflow-kernel-bugfix-or-compatibility-fix
+trigger: "when doing kernel bugfix or compatibility fix"
+confidence: 0.55
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/coleleavitt/profanity2
+---
+
+# Profanity2 Workflow Kernel Bugfix Or Compatibility Fix
+
+## Action
+
+Follow the kernel-bugfix-or-compatibility-fix workflow:
+1. Edit kernel source files (profanity.cl, keccak.cl).
+2. Commit changes with a message referencing the platform or compiler fixed.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~1x per month
+- Files: profanity.cl, keccak.cl
+
+---
+id: profanity2-workflow-merge-pull-request-or-branch
+trigger: "when doing merge pull request or branch"
+confidence: 0.7
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/coleleavitt/profanity2
+---
+
+# Profanity2 Workflow Merge Pull Request Or Branch
+
+## Action
+
+Follow the merge-pull-request-or-branch workflow:
+1. Merge the branch or pull request.
+2. Resolve any conflicts.
+3. Commit the merge with a message referencing the PR or branch.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~4x per month
+- Files: varies (all files touched by the PR/branch)
+
+---
+id: profanity2-instinct-file-naming
+trigger: "When creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: coleleavitt/profanity2
+---
+
+# Profanity2 Instinct File Naming
+
+## Action
+
+Name the file using PascalCase (e.g., MyFile.ts)
+
+## Evidence
+
+- Pattern in namingConventions.files: PascalCase
+
+---
+id: profanity2-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: coleleavitt/profanity2
+---
+
+# Profanity2 Instinct Function Naming
+
+## Action
+
+Name the function using camelCase (e.g., doSomething)
+
+## Evidence
+
+- Pattern in namingConventions.functions: camelCase
+
+---
+id: profanity2-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: coleleavitt/profanity2
+---
+
+# Profanity2 Instinct Class Naming
+
+## Action
+
+Name the class using PascalCase (e.g., MyClass)
+
+## Evidence
+
+- Pattern in namingConventions.classes: PascalCase
+
+---
+id: profanity2-instinct-constant-naming
+trigger: "When defining a constant value"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: coleleavitt/profanity2
+---
+
+# Profanity2 Instinct Constant Naming
+
+## Action
+
+Name the constant using SCREAMING_SNAKE_CASE (e.g., MAX_SIZE)
+
+## Evidence
+
+- Pattern in namingConventions.constants: SCREAMING_SNAKE_CASE
+
+---
+id: profanity2-instinct-relative-imports
+trigger: "When importing modules"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: coleleavitt/profanity2
+---
+
+# Profanity2 Instinct Relative Imports
+
+## Action
+
+Use relative import paths (e.g., import x from './x')
+
+## Evidence
+
+- Pattern in importStyle: relative
+
+---
+id: profanity2-instinct-named-exports
+trigger: "When exporting from a module"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: coleleavitt/profanity2
+---
+
+# Profanity2 Instinct Named Exports
+
+## Action
+
+Use named exports (e.g., export { foo })
+
+## Evidence
+
+- Pattern in exportStyle: named
+
+---
+id: profanity2-instinct-test-file-pattern
+trigger: "When adding a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: coleleavitt/profanity2
+---
+
+# Profanity2 Instinct Test File Pattern
+
+## Action
+
+Name the test file with the pattern *.test.ts
+
+## Evidence
+
+- Pattern in testing.filePattern: *.test.ts
+- tests/bench_mod_mul.cpp
+- tests/test_correctness.cpp
+
+---
+id: profanity2-instinct-unit-tests
+trigger: "When writing tests"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: coleleavitt/profanity2
+---
+
+# Profanity2 Instinct Unit Tests
+
+## Action
+
+Write unit tests for new features or bugfixes
+
+## Evidence
+
+- Pattern in testing.testTypes: unit
+- Commit: Add OpenCL correctness tests and benchmark for the mp_mod_mul optimization
+
+---
+id: profanity2-instinct-commit-format-freeform
+trigger: "When making a commit"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: coleleavitt/profanity2
+---
+
+# Profanity2 Instinct Commit Format Freeform
+
+## Action
+
+Use a concise, freeform commit message describing the change (e.g., 'Fix OpenCL device enumeration error handling')
+
+## Evidence
+
+- Pattern in commits.type: freeform
+- Examples: 'Update README.md', 'Increase speed by 20-35% by optimizing mp_mul_mod_word_sub()'
+
+---
+id: profanity2-instinct-feature-dev-workflow
+trigger: "When implementing a new feature or optimization in the kernel and verifying it"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: coleleavitt/profanity2
+---
+
+# Profanity2 Instinct Feature Dev Workflow
+
+## Action
+
+Edit kernel source, add/update tests and benchmarks, update Makefiles and .gitignore if needed, then commit all related changes together
+
+## Evidence
+
+- Workflow: feature-development-with-tests-and-benchmarks
+- Example commits and files in workflow
+
+---
+id: profanity2-instinct-docs-update-workflow
+trigger: "When improving or clarifying documentation"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: coleleavitt/profanity2
+---
+
+# Profanity2 Instinct Docs Update Workflow
+
+## Action
+
+Edit/add documentation files, link changes to issues/contributions, and commit all documentation changes together
+
+## Evidence
+
+- Workflow: documentation-update-and-enhancement
+- Example commits and files in workflow
+
+---
+id: profanity2-instinct-windows-build-workflow
+trigger: "When adding or fixing Windows build support or instructions"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: coleleavitt/profanity2
+---
+
+# Profanity2 Instinct Windows Build Workflow
+
+## Action
+
+Edit source files and Makefile for Windows, update/add Windows build docs, update README if needed, and commit all related changes together
+
+## Evidence
+
+- Workflow: windows-build-support-update
+- Example commits and files in workflow
+
+---
+id: profanity2-instinct-kernel-bugfix-workflow
+trigger: "When fixing kernel code for compatibility or bugs"
+confidence: 0.85
+domain: workflow
+source: repo-analysis
+source_repo: coleleavitt/profanity2
+---
+
+# Profanity2 Instinct Kernel Bugfix Workflow
+
+## Action
+
+Edit kernel source files and commit with a message referencing the platform or compiler fixed
+
+## Evidence
+
+- Workflow: kernel-bugfix-or-compatibility-fix
+- Example commits and files in workflow
+
+---
+id: profanity2-instinct-merge-pr-workflow
+trigger: "When integrating changes from a feature or fix branch into main"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: coleleavitt/profanity2
+---
+
+# Profanity2 Instinct Merge Pr Workflow
+
+## Action
+
+Merge the branch or PR, resolve conflicts, and commit with a message referencing the PR or branch
+
+## Evidence
+
+- Workflow: merge-pull-request-or-branch
+- Example commits and files in workflow
+

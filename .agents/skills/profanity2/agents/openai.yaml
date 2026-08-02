@@ -1,0 +1,6 @@
+interface:
+  display_name: "Profanity2"
+  short_description: "Repo-specific patterns and workflows for profanity2"
+  default_prompt: "Use the profanity2 repo skill to follow existing architecture, testing, and workflow conventions."
+policy:
+  allow_implicit_invocation: true
