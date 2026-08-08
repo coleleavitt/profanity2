@@ -26,7 +26,7 @@
 #
 # The workdir is printed on the last line, so the two steps compose:
 #
-#   WORK=$(bench/prepare-native.sh 9011bcd pr57-head)
+#   WORK=$(bench/prepare-native.sh 9011bcd pr/57)
 #   BENCH_ROOT=$WORK bench/run-benchmark.sh
 
 set -euo pipefail

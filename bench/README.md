@@ -107,7 +107,7 @@ The image is built for `linux/amd64` by default because the Linux branch of the 
 On macOS a container is a Linux virtual machine, and the Apple GPU is not passed into it: there is no counterpart to the NVIDIA Container Toolkit, the Ubuntu base image cannot reach `OpenCL.framework` on the host, and this directory's Dockerfile registers the NVIDIA ICD in any case. Rebuilding the image for `linux/arm64` changes the CPU architecture and nothing else, so a container on a Mac measures at best a CPU OpenCL runtime. To compare two revisions on an Apple GPU, build them on the host:
 
 ```bash
-WORK=$(bench/prepare-native.sh 9011bcd pr57-head)
+WORK=$(bench/prepare-native.sh 9011bcd pr/57)
 BENCH_ROOT=$WORK bench/run-benchmark.sh --mode leading --repeats 3
 ```
 

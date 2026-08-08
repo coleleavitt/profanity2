@@ -37,6 +37,11 @@ jobs:
         run: |
           docker run --rm profanity2:ci --help | grep -q '^usage: '
           docker run --rm profanity2:ci clinfo --version
+          # Without a GPU the program exits before it ever loads a kernel, so
+          # nothing else here would notice the kernels missing from the image.
+          # They have to sit next to the binary, which is where it looks first.
+          docker run --rm profanity2:ci ls /opt/profanity2/profanity2.x64 \
+              /opt/profanity2/keccak.cl /opt/profanity2/profanity.cl
           # No GPU on the runner, so the entrypoint must refuse to start.
           ! docker run --rm profanity2:ci --benchmark -z "$(printf 'a%.0s' {1..128})"
 
