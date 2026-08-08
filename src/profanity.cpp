@@ -147,18 +147,31 @@ std::vector<cl_device_id> getAllDevices(cl_device_type deviceType = CL_DEVICE_TY
 	return vDevices;
 }
 
+// Reads a fixed-size device or program property, reporting whether the runtime
+// actually answered. Everything below asks for at least one property that not
+// every runtime implements, and the value has to be zeroed rather than left as
+// whatever was on the stack when the query fails.
+template <typename T, typename U, typename V, typename W>
+bool clGetWrapperChecked(T & t, U function, V param, W param2) {
+	t = T();
+	return function(param, param2, sizeof(t), &t, NULL) == CL_SUCCESS;
+}
+
 template <typename T, typename U, typename V, typename W>
 T clGetWrapper(U function, V param, W param2) {
 	T t;
-	function(param, param2, sizeof(t), &t, NULL);
+	clGetWrapperChecked(t, function, param, param2);
 	return t;
 }
 
 template <typename U, typename V, typename W>
 std::string clGetWrapperString(U function, V param, W param2) {
-	size_t len;
-	function(param, param2, 0, NULL, &len);
-	char * const szString = new char[len];
+	size_t len = 0;
+	if (function(param, param2, 0, NULL, &len) != CL_SUCCESS || len == 0) {
+		return std::string();
+	}
+
+	char * const szString = new char[len]();
 	function(param, param2, len, szString, NULL);
 	std::string r(szString);
 	delete[] szString;
@@ -167,7 +180,7 @@ std::string clGetWrapperString(U function, V param, W param2) {
 
 template <typename T, typename U, typename V, typename W>
 std::vector<T> clGetWrapperVector(U function, V param, W param2) {
-	size_t len;
+	size_t len = 0;
 	function(param, param2, 0, NULL, &len);
 	len /= sizeof(T);
 	std::vector<T> v;
@@ -209,14 +222,34 @@ unsigned int getUniqueDeviceIdentifier(const cl_device_id & deviceId) {
 	// cl_device_topology_amd struct and the TYPE_PCIE constant, hence the
 	// second condition.
 #if defined(CL_DEVICE_TOPOLOGY_AMD) && defined(CL_DEVICE_TOPOLOGY_TYPE_PCIE_AMD)
-	auto topology = clGetWrapper<cl_device_topology_amd>(clGetDeviceInfo, deviceId, CL_DEVICE_TOPOLOGY_AMD);
-	if (topology.raw.type == CL_DEVICE_TOPOLOGY_TYPE_PCIE_AMD) {
+	cl_device_topology_amd topology;
+	if (clGetWrapperChecked(topology, clGetDeviceInfo, deviceId, CL_DEVICE_TOPOLOGY_AMD)
+		&& topology.raw.type == CL_DEVICE_TOPOLOGY_TYPE_PCIE_AMD) {
 		return (topology.pcie.bus << 16) + (topology.pcie.device << 8) + topology.pcie.function;
 	}
 #endif
-	cl_int bus_id = clGetWrapper<cl_int>(clGetDeviceInfo, deviceId, CL_DEVICE_PCI_BUS_ID_NV);
-	cl_int slot_id = clGetWrapper<cl_int>(clGetDeviceInfo, deviceId, CL_DEVICE_PCI_SLOT_ID_NV);
-	return (bus_id << 16) + slot_id;
+	cl_int bus_id, slot_id;
+	if (clGetWrapperChecked(bus_id, clGetDeviceInfo, deviceId, CL_DEVICE_PCI_BUS_ID_NV)
+		&& clGetWrapperChecked(slot_id, clGetDeviceInfo, deviceId, CL_DEVICE_PCI_SLOT_ID_NV)) {
+		return (bus_id << 16) + slot_id;
+	}
+
+	// Neither vendor's PCI extension is available, which is where Apple's
+	// runtime ends up. What identifies a device here is what it calls itself,
+	// and that is enough for a compiled kernel: two identical GPUs hashing to
+	// one entry is correct, because the binary they need is the same.
+	const std::string strIdentity =
+		clGetWrapperString(clGetDeviceInfo, deviceId, CL_DEVICE_NAME) + "\n"
+		+ clGetWrapperString(clGetDeviceInfo, deviceId, CL_DEVICE_VENDOR) + "\n"
+		+ clGetWrapperString(clGetDeviceInfo, deviceId, CL_DRIVER_VERSION);
+
+	// FNV-1a. It only has to be stable from one run to the next.
+	unsigned int hash = 2166136261u;
+	for (const char c : strIdentity) {
+		hash = (hash ^ static_cast<unsigned char>(c)) * 16777619u;
+	}
+
+	return hash;
 }
 
 template <typename T> bool printResult(const T & t, const cl_int & err) {
