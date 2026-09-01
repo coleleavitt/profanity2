@@ -1,3 +1,5 @@
+> **Archived.** This repository is no longer maintained. Current versions live in **[1miner](https://github.com/1inch/1miner)**, where active development continues.
+
 # profanity2
 
 Profanity is a high performance (probably the fastest!) vanity address generator for Ethereum. Create cool customized addresses that you never realized you needed! Recieve Ether in style! Wow!
